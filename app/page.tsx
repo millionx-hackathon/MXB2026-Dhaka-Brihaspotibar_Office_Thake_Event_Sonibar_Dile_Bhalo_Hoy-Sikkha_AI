@@ -36,9 +36,9 @@ export default function HomePage() {
               </SignUpButton>
             </SignedOut>
             <SignedIn>
-              <Link href="/dashboard">
+              <Link href="/onboarding">
                 <button className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors">
-                  Go to Dashboard
+                   Start Onboarding
                 </button>
               </Link>
             </SignedIn>
@@ -68,9 +68,9 @@ export default function HomePage() {
               </SignUpButton>
             </SignedOut>
             <SignedIn>
-              <Link href="/dashboard">
+              <Link href="/onboarding">
                 <button className="px-8 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold text-lg transition-colors flex items-center space-x-2">
-                  <span>Go to Dashboard</span>
+                  <span>Start Onboarding</span>
                   <ArrowRight className="h-5 w-5" />
                 </button>
               </Link>
