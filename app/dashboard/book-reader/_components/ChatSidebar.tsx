@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Send, Loader2, Sparkles, FileQuestion, Trash2, Copy, Check } from 'lucide-react';
 import StreamingMessage from './StreamingMessage';
-import { getPageQuestions, getRandomSuggestion } from '@/app/dashboard/book-reader/_data/pageQuestions';
+import { getPageQuestions, getRandomSuggestion, PageQuestion } from '@/app/dashboard/book-reader/_data/pageQuestions';
 
 interface Message {
   id: string;

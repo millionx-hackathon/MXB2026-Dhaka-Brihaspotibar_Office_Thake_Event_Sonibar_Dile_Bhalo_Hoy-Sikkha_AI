@@ -3,6 +3,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react';
+import { TextHighlight } from '@/lib/store/slices/bookReaderSlice';
+
+// Import react-pdf styles
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
 
 // Set up PDF.js worker at module level - must be done before any PDF rendering
 if (typeof window !== 'undefined') {
@@ -15,6 +20,9 @@ interface PDFViewerProps {
   setCurrentPage: (page: number) => void;
   viewMode: 'page' | 'scroll';
   onScaleChange?: (scale: number) => void;
+  isHighlighted?: boolean;
+  onTotalPagesChange?: (totalPages: number) => void;
+  textHighlights?: TextHighlight[];
 }
 
 export default function PDFViewer({
@@ -23,6 +31,9 @@ export default function PDFViewer({
   setCurrentPage,
   viewMode,
   onScaleChange,
+  isHighlighted = false,
+  onTotalPagesChange,
+  textHighlights = [],
 }: PDFViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [scale, setScale] = useState(1.2);
@@ -35,6 +46,7 @@ export default function PDFViewer({
     setNumPages(numPages);
     setLoading(false);
     setError(null);
+    onTotalPagesChange?.(numPages);
   };
 
   const onDocumentLoadError = (error: Error) => {
@@ -119,8 +131,11 @@ export default function PDFViewer({
             >
               <ChevronLeft className="w-5 h-5 text-gray-700" />
             </button>
-            <span className="text-sm font-semibold text-gray-900 min-w-[80px] text-center px-2">
+            <span className={`text-sm font-semibold min-w-[80px] text-center px-2 ${
+              isHighlighted ? 'text-yellow-600' : 'text-gray-900'
+            }`}>
               {currentPage} / {numPages || '...'}
+              {isHighlighted && ' ⭐'}
             </span>
             <button
               onClick={handleNextPage}
@@ -169,9 +184,9 @@ export default function PDFViewer({
         {viewMode === 'page' ? (
           <div
             ref={pageRef}
-            className={`transition-all duration-300 ${
+            className={`transition-all duration-300 relative ${
               isTurning ? 'opacity-50 scale-95' : 'opacity-100 scale-100'
-            }`}
+            } ${isHighlighted ? 'ring-4 ring-yellow-400 ring-opacity-50 rounded-lg' : ''}`}
             style={{ userSelect: 'text' }}
           >
             <Document
@@ -192,6 +207,27 @@ export default function PDFViewer({
                 className="shadow-2xl"
               />
             </Document>
+            {/* Render text highlights */}
+            {textHighlights.length > 0 && (
+              <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 10 }}>
+                {textHighlights.map((highlight) => (
+                  highlight.rects.map((rect, idx) => (
+                    <div
+                      key={`${highlight.id}-${idx}`}
+                      className="absolute opacity-40"
+                      style={{
+                        left: `${rect.x}px`,
+                        top: `${rect.y}px`,
+                        width: `${rect.width}px`,
+                        height: `${rect.height}px`,
+                        backgroundColor: highlight.color || '#fef08a',
+                        pointerEvents: 'none',
+                      }}
+                    />
+                  ))
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <div className="w-full max-w-4xl space-y-4">

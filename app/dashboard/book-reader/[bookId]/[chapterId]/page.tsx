@@ -2,14 +2,17 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, MessageSquare, X, Send, Loader2, Sparkles, FileQuestion } from 'lucide-react';
+import { ArrowLeft, MessageSquare, X, Send, Loader2, Sparkles, FileQuestion, FileText, Layers, BarChart3, Star } from 'lucide-react';
 import { getBookById, getChapterById } from '../../_data/books';
 import PDFViewer from '../../_components/PDFViewer';
 import ChatSidebar from '../../_components/ChatSidebar';
 import TextSelectionPopup from '../../_components/TextSelectionPopup';
 import ResizablePanels from '../../_components/ResizablePanels';
+import SmartPageSummary from '../../_components/SmartPageSummary';
+import FlashcardGenerator from '../../_components/FlashcardGenerator';
+import ProgressInsights from '../../_components/ProgressInsights';
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
-import { setLastReadPage, updateReadingTime } from '@/lib/store/slices/bookReaderSlice';
+import { setLastReadPage, updateReadingTime, toggleHighlight, addTextHighlight, TextHighlight } from '@/lib/store/slices/bookReaderSlice';
 
 export default function ChapterReaderPage() {
   const params = useParams();
@@ -23,7 +26,7 @@ export default function ChapterReaderPage() {
 
   // Get last read page from Redux
   const lastReadPage = useAppSelector(
-    (state) => state.bookReader.lastReadPages[`${bookId}/${chapterId}`]
+    (state) => state.bookReader?.lastReadPages?.[`${bookId}/${chapterId}`]
   );
 
   const [chatOpen, setChatOpen] = useState(false);
@@ -34,8 +37,25 @@ export default function ChapterReaderPage() {
   const [viewMode, setViewMode] = useState<'page' | 'scroll'>('page');
   const [contextItems, setContextItems] = useState<Array<{ text: string; page: number }>>([]);
   const [pdfScale, setPdfScale] = useState(1.2);
+  const [totalPages, setTotalPages] = useState(100); // Default, will be updated from PDF
   const readingStartTime = useRef<number>(Date.now());
   const lastPageChangeTime = useRef<number>(Date.now());
+
+  // New feature states
+  const [showSummary, setShowSummary] = useState(false);
+  const [showFlashcards, setShowFlashcards] = useState(false);
+  const [showProgress, setShowProgress] = useState(false);
+
+  // Get highlight state
+  const highlightedPages = useAppSelector(
+    (state) => state.bookReader?.readingSessions?.[`${bookId}/${chapterId}`]?.highlightedPages || []
+  );
+  const isCurrentPageHighlighted = highlightedPages.includes(currentPage);
+
+  // Get text highlights for current page
+  const textHighlights = useAppSelector(
+    (state) => state.bookReader?.textHighlights?.[`${bookId}/${chapterId}`]?.filter(h => h.page === currentPage) || []
+  );
 
   if (!book || !chapter) {
     return (
@@ -148,6 +168,51 @@ export default function ChapterReaderPage() {
     }
   };
 
+  const handleHighlight = () => {
+    if (selectedText) {
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        const rects: Array<{ x: number; y: number; width: number; height: number }> = [];
+
+        // Get all bounding rectangles for the selection
+        for (let i = 0; i < range.getClientRects().length; i++) {
+          const rect = range.getClientRects()[i];
+          const pageElement = range.commonAncestorContainer.nodeType === Node.TEXT_NODE
+            ? range.commonAncestorContainer.parentElement?.closest('.react-pdf__Page')
+            : (range.commonAncestorContainer as Element).closest('.react-pdf__Page');
+
+          if (pageElement) {
+            const pageRect = pageElement.getBoundingClientRect();
+            rects.push({
+              x: rect.left - pageRect.left,
+              y: rect.top - pageRect.top,
+              width: rect.width,
+              height: rect.height,
+            });
+          }
+        }
+
+        if (rects.length > 0) {
+          const highlight: TextHighlight = {
+            id: `highlight-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            text: selectedText.trim(),
+            page: currentPage,
+            rects,
+            createdAt: Date.now(),
+            color: '#fef08a', // Yellow highlight
+          };
+
+          dispatch(addTextHighlight({ bookId, chapterId, highlight }));
+        }
+      }
+
+      setShowTextPopup(false);
+      setSelectedText('');
+      window.getSelection()?.removeAllRanges();
+    }
+  };
+
   // Load last read page on mount
   useEffect(() => {
     if (lastReadPage && lastReadPage > 0) {
@@ -205,7 +270,50 @@ export default function ChapterReaderPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* AI Features */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowSummary(true)}
+              className="px-3 py-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors flex items-center gap-2 text-sm font-medium"
+              title="পৃষ্ঠা সারাংশ"
+            >
+              <FileText className="w-4 h-4" />
+              <span className="hidden md:inline">সারাংশ</span>
+            </button>
+
+            <button
+              onClick={() => setShowFlashcards(true)}
+              className="px-3 py-2 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors flex items-center gap-2 text-sm font-medium"
+              title="ফ্ল্যাশকার্ড"
+            >
+              <Layers className="w-4 h-4" />
+              <span className="hidden md:inline">ফ্ল্যাশকার্ড</span>
+            </button>
+
+            <button
+              onClick={() => setShowProgress(true)}
+              className="px-3 py-2 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 transition-colors flex items-center gap-2 text-sm font-medium"
+              title="পঠন বিশ্লেষণ"
+            >
+              <BarChart3 className="w-4 h-4" />
+              <span className="hidden md:inline">বিশ্লেষণ</span>
+            </button>
+
+            <button
+              onClick={() => dispatch(toggleHighlight({ bookId, chapterId, page: currentPage }))}
+              className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium ${
+                isCurrentPageHighlighted
+                  ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+              title="পৃষ্ঠা হাইলাইট করুন"
+            >
+              <Star className={`w-4 h-4 ${isCurrentPageHighlighted ? 'fill-yellow-500' : ''}`} />
+              <span className="hidden md:inline">হাইলাইট</span>
+            </button>
+          </div>
+
           {/* View Mode Toggle */}
           <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
             <button
@@ -260,6 +368,9 @@ export default function ChapterReaderPage() {
               setCurrentPage={setCurrentPage}
               viewMode={viewMode}
               onScaleChange={setPdfScale}
+              isHighlighted={isCurrentPageHighlighted}
+              onTotalPagesChange={setTotalPages}
+              textHighlights={textHighlights}
             />
           }
           rightPanel={
@@ -288,13 +399,48 @@ export default function ChapterReaderPage() {
           <TextSelectionPopup
             text={selectedText}
             position={popupPosition}
+            page={currentPage}
             onAddToContext={handleAddToContext}
             onAskAI={handleAskAI}
+            onHighlight={handleHighlight}
             onClose={() => {
               setShowTextPopup(false);
               setSelectedText('');
               window.getSelection()?.removeAllRanges();
             }}
+          />
+        )}
+
+        {/* Smart Page Summary Modal */}
+        {showSummary && (
+          <SmartPageSummary
+            bookId={bookId}
+            chapterId={chapterId}
+            currentPage={currentPage}
+            chapterTitle={chapter.title}
+            onClose={() => setShowSummary(false)}
+          />
+        )}
+
+        {/* Flashcard Generator Modal */}
+        {showFlashcards && (
+          <FlashcardGenerator
+            bookId={bookId}
+            chapterId={chapterId}
+            currentPage={currentPage}
+            chapterTitle={chapter.title}
+            onClose={() => setShowFlashcards(false)}
+          />
+        )}
+
+        {/* Progress Insights Modal */}
+        {showProgress && (
+          <ProgressInsights
+            bookId={bookId}
+            chapterId={chapterId}
+            totalPages={totalPages}
+            chapterTitle={chapter.title}
+            onClose={() => setShowProgress(false)}
           />
         )}
       </div>
