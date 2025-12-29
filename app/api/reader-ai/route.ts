@@ -1,8 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-
-// Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_KEY || '');
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -24,6 +20,9 @@ interface ReaderAIRequest {
   pageText?: string; // Text extracted from current PDF page
   chatHistory?: ChatMessage[];
 }
+
+const GLM_API_URL = 'https://api.z.ai/api/paas/v4/chat/completions';
+const GLM_MODEL = 'GLM-4.5-AirX';
 
 // Page-specific content knowledge base
 const pageKnowledge: Record<string, Record<number, string>> = {
@@ -107,7 +106,7 @@ function getChapterContext(chapterId: string, bookId: string): string {
 মূল বিষয়সমূহ:
 - পদার্থবিজ্ঞানের পরিসর ও ক্রমবিকাশ
 - ভৌত রাশি (Physical Quantities): মৌলিক ও লব্ধ রাশি
-- একক (Units): SI একক ব্যবস্থা
+- একক (Units): SI একক व्यवस्था
 - পরিমাপ যন্ত্র: স্লাইড ক্যালিপার্স, স্ক্রু গজ
 - পরিমাপের নির্ভুলতা ও যথার্থতা
 - মাত্রা বিশ্লেষণ
@@ -159,6 +158,14 @@ export async function POST(request: NextRequest) {
 
     if (!message) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
+    }
+
+    const apiKey = process.env.GLM_KEY;
+    if (!apiKey) {
+      return NextResponse.json({
+        success: false,
+        error: 'GLM API key not configured'
+      }, { status: 500 });
     }
 
     // Build the system prompt with educational context
@@ -237,42 +244,55 @@ ${selectedTextContext}
 
 মনে রাখবে: তুমি একজন সহায়ক শিক্ষক, শিক্ষার্থীদের শেখাতে সাহায্য করাই তোমার কাজ! 📖✨`;
 
-    // Build conversation history for context
-    const conversationHistory = chatHistory.map(msg => ({
-      role: msg.role === 'user' ? 'user' : 'model',
-      parts: [{ text: msg.content }]
-    }));
-
-    // Initialize the model - using gemini-2.0-flash for higher rate limits
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
-      generationConfig: {
-        temperature: 0.7,
-        topK: 40,
-        topP: 0.95,
-        maxOutputTokens: 1024,
+    // Construct messages for GLM
+    const messages = [
+      {
+        role: 'system',
+        content: systemPrompt
       },
+      {
+        role: 'assistant',
+        content: 'আমি **Reader AI**, Shikkha AI প্ল্যাটফর্মের পাঠ্য সহকারী। আমি তোমাকে এই পৃষ্ঠার বিষয়বস্তু বুঝতে সাহায্য করব। যেকোনো প্রশ্ন জিজ্ঞাসা কর! 📚'
+      },
+      ...chatHistory.map(msg => ({
+        role: msg.role === 'user' ? 'user' : 'assistant',
+        content: msg.content
+      })),
+      {
+        role: 'user',
+        content: message
+      }
+    ];
+
+    // Call GLM API
+    const response = await fetch(GLM_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: GLM_MODEL,
+        messages,
+        thinking: {
+          type: 'disabled'
+        },
+        max_tokens: 1024,
+        temperature: 0.7,
+      }),
     });
 
-    // Start chat with history
-    const chat = model.startChat({
-      history: [
-        {
-          role: 'user',
-          parts: [{ text: systemPrompt }]
-        },
-        {
-          role: 'model',
-          parts: [{ text: 'আমি **Reader AI**, Shikkha AI প্ল্যাটফর্মের পাঠ্য সহকারী। আমি তোমাকে এই পৃষ্ঠার বিষয়বস্তু বুঝতে সাহায্য করব। যেকোনো প্রশ্ন জিজ্ঞাসা কর! 📚' }]
-        },
-        ...conversationHistory
-      ],
-    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('GLM API Error:', response.status, errorText);
+      return NextResponse.json({
+        success: false,
+        error: `AI সার্ভারে সমস্যা: ${response.status}`
+      }, { status: 500 });
+    }
 
-    // Send the message
-    const result = await chat.sendMessage(message);
-    const response = await result.response;
-    const text = response.text();
+    const data = await response.json();
+    const text = data.choices?.[0]?.message?.content || '';
 
     return NextResponse.json({
       response: text,
@@ -287,7 +307,6 @@ ${selectedTextContext}
       console.error('Error stack:', error.stack);
     }
 
-    // Check if it's a Gemini API error
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
     return NextResponse.json(
@@ -295,7 +314,7 @@ ${selectedTextContext}
         error: `AI সার্ভারে সমস্যা হয়েছে: ${errorMessage}`,
         success: false
       },
+      { status: 500 }
     );
   }
 }
-

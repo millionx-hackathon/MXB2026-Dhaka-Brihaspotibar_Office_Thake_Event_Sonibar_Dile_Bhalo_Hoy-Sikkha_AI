@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import * as fs from 'fs';
 import * as path from 'path';
-
-// Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_KEY || '');
 
 interface MathStep {
     id: number;
@@ -36,6 +32,10 @@ interface MathSolverResponse {
     error?: string;
 }
 
+// GLM API configuration
+const GLM_API_URL = 'https://api.z.ai/api/paas/v4/chat/completions';
+const GLM_MODEL = 'glm-4.7';
+
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
@@ -48,42 +48,62 @@ export async function POST(request: NextRequest) {
             }, { status: 400 });
         }
 
-        // Initialize the model - using gemini-2.0-flash for higher rate limits
-        const model = genAI.getGenerativeModel({
-            model: 'gemini-2.0-flash',
-            generationConfig: {
-                temperature: 0.3,
-                topK: 40,
-                topP: 0.95,
-                maxOutputTokens: 4096,
-            },
-        });
+        const apiKey = process.env.GLM_KEY;
+        if (!apiKey) {
+            return NextResponse.json({
+                success: false,
+                error: 'GLM API key not configured'
+            }, { status: 500 });
+        }
 
         let prompt: string;
-        let imagePart: { inlineData: { data: string; mimeType: string } } | null = null;
+        let messages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }>;
 
-        // Handle image input
+        // Handle image input - use GLM-4.6V for vision
         if (imageBase64) {
-            imagePart = {
-                inlineData: {
-                    data: imageBase64,
-                    mimeType: 'image/png',
-                },
-            };
             prompt = buildImagePrompt();
+            messages = [
+                {
+                    role: 'user',
+                    content: [
+                        {
+                            type: 'image_url',
+                            image_url: {
+                                url: `data:image/png;base64,${imageBase64}`
+                            }
+                        },
+                        {
+                            type: 'text',
+                            text: prompt
+                        }
+                    ]
+                }
+            ];
         } else if (imagePath) {
             // Read image from public folder
             try {
                 const fullPath = path.join(process.cwd(), 'public', imagePath);
                 const imageBuffer = fs.readFileSync(fullPath);
                 const base64 = imageBuffer.toString('base64');
-                imagePart = {
-                    inlineData: {
-                        data: base64,
-                        mimeType: 'image/png',
-                    },
-                };
+
                 prompt = buildImagePrompt();
+                messages = [
+                    {
+                        role: 'user',
+                        content: [
+                            {
+                                type: 'image_url',
+                                image_url: {
+                                    url: `data:image/png;base64,${base64}`
+                                }
+                            },
+                            {
+                                type: 'text',
+                                text: prompt
+                            }
+                        ]
+                    }
+                ];
             } catch (err) {
                 console.error('Error reading image:', err);
                 return NextResponse.json({
@@ -93,20 +113,46 @@ export async function POST(request: NextRequest) {
             }
         } else {
             prompt = buildTextPrompt(equation);
+            messages = [
+                {
+                    role: 'user',
+                    content: prompt
+                }
+            ];
         }
 
-        // Call Gemini
-        let result;
-        if (imagePart) {
-            result = await model.generateContent([prompt, imagePart]);
-        } else {
-            result = await model.generateContent(prompt);
+        // Call GLM API
+        const useVision = imageBase64 || imagePath;
+        const response = await fetch(GLM_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+                model: useVision ? 'glm-4.6v' : GLM_MODEL,
+                messages,
+                thinking: {
+                    type: 'disabled'  // Disable thinking for direct JSON output
+                },
+                max_tokens: 4096,
+                temperature: 0.3,
+            }),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('GLM API Error:', response.status, errorText);
+            return NextResponse.json({
+                success: false,
+                error: `AI সার্ভারে সমস্যা: ${response.status}`
+            }, { status: 500 });
         }
 
-        const response = await result.response;
-        const text = response.text();
+        const data = await response.json();
+        const text = data.choices?.[0]?.message?.content || '';
 
-        // Parse the JSON response from Gemini
+        // Parse the JSON response
         try {
             // Extract JSON from the response (handle markdown code blocks)
             let jsonStr = text;
@@ -199,7 +245,7 @@ ${equation}
   "finalAnswer": "x = 2, x = 3"
 }
 
-IMPORTANT: Return ONLY valid JSON, no extra text.`;
+IMPORTANT: Return ONLY valid JSON, no extra text or markdown code blocks.`;
 }
 
 function buildImagePrompt(): string {
@@ -238,14 +284,14 @@ function buildImagePrompt(): string {
     {
       "name": "formula",
       "name_bn": "দ্বিঘাত সূত্র",
-      "steps": [...]
+      "steps": []
     }
   ],
   "finalAnswer": "x = 2, x = 3"
 }
 
 IMPORTANT:
-- Return ONLY valid JSON, no extra text or markdown
+- Return ONLY valid JSON, no extra text or markdown code blocks
 - All explanations must be in Bengali
 - Include at least 3-5 steps per method
 - Include deepDive for at least the first 2 steps`;
