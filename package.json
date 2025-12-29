@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^6.36.4",
+    "@google/generative-ai": "^0.24.1",
     "@reduxjs/toolkit": "^2.11.2",
     "@types/react-pdf": "^7.0.0",
     "class-variance-authority": "^0.7.1",

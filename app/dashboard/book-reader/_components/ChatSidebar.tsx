@@ -68,7 +68,7 @@ export default function ChatSidebar({
     };
   }, [currentPage, chapterTitle]);
 
-  const handleAskAIQuestion = (text: string) => {
+  const handleAskAIQuestion = async (text: string) => {
     const questionMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
@@ -79,31 +79,76 @@ export default function ChatSidebar({
     setIsLoading(true);
     setSuggestedQuestions([]);
 
-    // Generate response text
-    const responseText = `আপনার নির্বাচিত অংশটি ${chapterTitle} অধ্যায়ের একটি গুরুত্বপূর্ণ বিষয় নির্দেশ করে।\n\nএই অংশে আলোচিত বিষয়টি পদার্থবিজ্ঞানের ইতিহাস এবং এর বিকাশের সাথে সম্পর্কিত। এটি দেখায় যে কীভাবে বিজ্ঞানীরা সময়ের সাথে সাথে বিভিন্ন পরিমাপ এবং পর্যবেক্ষণের মাধ্যমে পদার্থবিজ্ঞানের জ্ঞান বৃদ্ধি করেছেন।\n\nএই ধারণাটি বোঝার জন্য:\n• ঐতিহাসিক প্রেক্ষাপট বুঝতে হবে\n• পরিমাপের গুরুত্ব অনুধাবন করতে হবে\n• বিজ্ঞানের ক্রমবিকাশ সম্পর্কে জানতে হবে\n\nআপনি যদি এই বিষয়ের কোনো নির্দিষ্ট দিক সম্পর্কে জানতে চান, তাহলে আমাকে জিজ্ঞাসা করুন।`;
+    // Build context with the selected text
+    const selectedContext = [{ text, page: currentPage }];
 
-    // Add streaming message
-    const aiMessageId = (Date.now() + 1).toString();
-    const aiMessage: Message = {
-      id: aiMessageId,
-      role: 'assistant',
-      content: responseText,
-      quotes: [{ text, page: currentPage }],
-      timestamp: new Date(),
-      isStreaming: true,
-    };
-    setMessages(prev => [...prev, aiMessage]);
+    try {
+      const response = await fetch('/api/reader-ai', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: `এই অংশটি ব্যাখ্যা করুন: "${text}"`,
+          contextItems: selectedContext,
+          currentPage,
+          chapterTitle,
+          chapterId,
+          bookId,
+          chatHistory: [],
+        }),
+      });
 
-    // Mark as complete after streaming would finish (approximate)
-    // 1000ms initial delay + text length * 30ms per word + 500ms buffer
-    setTimeout(() => {
-      setMessages(prev => prev.map(msg =>
-        msg.id === aiMessageId
-          ? { ...msg, isStreaming: false }
-          : msg
-      ));
-      setIsLoading(false);
-    }, 1000 + responseText.length * 30 + 500);
+      const data = await response.json();
+
+      const aiMessageId = (Date.now() + 1).toString();
+      const aiMessage: Message = {
+        id: aiMessageId,
+        role: 'assistant',
+        content: data.success ? data.response : (data.error || 'দুঃখিত, উত্তর দিতে সমস্যা হয়েছে।'),
+        quotes: [{ text, page: currentPage }],
+        timestamp: new Date(),
+        isStreaming: data.success,
+      };
+      setMessages(prev => [...prev, aiMessage]);
+
+      if (data.success) {
+        setTimeout(() => {
+          setMessages(prev => prev.map(msg =>
+            msg.id === aiMessageId
+              ? { ...msg, isStreaming: false }
+              : msg
+          ));
+          setIsLoading(false);
+        }, Math.min(data.response.length * 20, 3000));
+      } else {
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error('Ask AI Error:', error);
+      // Fallback response
+      const responseText = `আপনার নির্বাচিত অংশটি ${chapterTitle} অধ্যায়ের একটি গুরুত্বপূর্ণ বিষয় নির্দেশ করে।\n\nএই অংশে আলোচিত বিষয়টি পদার্থবিজ্ঞানের ইতিহাস এবং এর বিকাশের সাথে সম্পর্কিত। আপনি যদি এই বিষয়ের কোনো নির্দিষ্ট দিক সম্পর্কে জানতে চান, তাহলে আমাকে জিজ্ঞাসা করুন।`;
+
+      const aiMessageId = (Date.now() + 1).toString();
+      const aiMessage: Message = {
+        id: aiMessageId,
+        role: 'assistant',
+        content: responseText,
+        quotes: [{ text, page: currentPage }],
+        timestamp: new Date(),
+        isStreaming: true,
+      };
+      setMessages(prev => [...prev, aiMessage]);
+
+      setTimeout(() => {
+        setMessages(prev => prev.map(msg =>
+          msg.id === aiMessageId
+            ? { ...msg, isStreaming: false }
+            : msg
+        ));
+        setIsLoading(false);
+      }, 1000 + responseText.length * 30 + 500);
+    }
   };
 
   // Load page context when chat opens or page changes (only if no messages exist)
@@ -183,31 +228,87 @@ export default function ChatSidebar({
     setIsLoading(true);
     setSuggestedQuestions([]);
 
-    // Generate response text
-    const responseText = generateMockResponse(question, contextItems, currentPage, chapterId);
+    // Prepare chat history for context (last 10 messages)
+    const chatHistory = messages.slice(-10).map(msg => ({
+      role: msg.role,
+      content: msg.content,
+    }));
 
-    // Add streaming message
-    const aiMessageId = (Date.now() + 1).toString();
-    const aiMessage: Message = {
-      id: aiMessageId,
-      role: 'assistant',
-      content: responseText,
-      quotes: contextItems.length > 0 ? contextItems.slice(0, 2) : undefined,
-      timestamp: new Date(),
-      isStreaming: true,
-    };
-    setMessages(prev => [...prev, aiMessage]);
+    try {
+      // Call the real AI API
+      const response = await fetch('/api/reader-ai', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: question,
+          contextItems,
+          currentPage,
+          chapterTitle,
+          chapterId,
+          bookId,
+          chatHistory,
+        }),
+      });
 
-    // Mark as complete after streaming would finish
-    // 1000ms initial delay + text length * 30ms per word + 500ms buffer
-    setTimeout(() => {
-      setMessages(prev => prev.map(msg =>
-        msg.id === aiMessageId
-          ? { ...msg, isStreaming: false }
-          : msg
-      ));
-      setIsLoading(false);
-    }, 1000 + responseText.length * 30 + 500);
+      const data = await response.json();
+
+      if (data.success && data.response) {
+        // Add AI response
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: data.response,
+          quotes: contextItems.length > 0 ? contextItems.slice(0, 2) : undefined,
+          timestamp: new Date(),
+          isStreaming: true,
+        };
+        setMessages(prev => [...prev, aiMessage]);
+
+        // Simulate streaming effect then mark complete
+        setTimeout(() => {
+          setMessages(prev => prev.map(msg =>
+            msg.id === aiMessage.id
+              ? { ...msg, isStreaming: false }
+              : msg
+          ));
+          setIsLoading(false);
+        }, Math.min(data.response.length * 20, 3000));
+      } else {
+        // Handle error - show fallback response
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: data.error || 'দুঃখিত, উত্তর দিতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।',
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, errorMessage]);
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error('Chat API Error:', error);
+      // Fallback to mock response on error
+      const responseText = generateMockResponse(question, contextItems, currentPage, chapterId);
+      const aiMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: responseText,
+        quotes: contextItems.length > 0 ? contextItems.slice(0, 2) : undefined,
+        timestamp: new Date(),
+        isStreaming: true,
+      };
+      setMessages(prev => [...prev, aiMessage]);
+
+      setTimeout(() => {
+        setMessages(prev => prev.map(msg =>
+          msg.id === aiMessage.id
+            ? { ...msg, isStreaming: false }
+            : msg
+        ));
+        setIsLoading(false);
+      }, 1000 + responseText.length * 30 + 500);
+    }
   };
 
   const handleSuggestedQuestion = (question: string) => {
