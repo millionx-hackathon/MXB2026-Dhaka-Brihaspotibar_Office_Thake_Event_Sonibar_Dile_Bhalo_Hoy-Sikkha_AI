@@ -20,11 +20,8 @@ export function LearningAssistant() {
   const inputRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
 
-  // Hide on book-reader pages
+  // Hide on book-reader pages - check AFTER all hooks are declared
   const isBookReaderPage = pathname?.includes('/book-reader');
-  if (isBookReaderPage) {
-    return null;
-  }
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
@@ -35,6 +32,11 @@ export function LearningAssistant() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Early return AFTER all hooks are declared
+  if (isBookReaderPage) {
+    return null;
+  }
 
   const handleSend = async () => {
     if (!input.trim() || isTyping) return;
