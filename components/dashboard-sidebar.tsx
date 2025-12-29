@@ -45,11 +45,6 @@ const navigationItems: NavItem[] = [
     icon: Phone,
   },
   {
-    title: "শিক্ষা ভাই (Audio)",
-    href: "/dashboard/audio-tutor",
-    icon: Headphones,
-  },
-  {
     title: "গণিত সমাধান",
     href: "/dashboard/math-solver",
     icon: Calculator,
@@ -63,9 +58,14 @@ const navigationItems: NavItem[] = [
 
 const strategyItems: NavItem[] = [
   {
-    title: "বই পড়ুন",
+    title: "বই পড়ুন",
     href: "/dashboard/book-reader",
     icon: FileText,
+  },
+  {
+    title: "শিক্ষা ভাই (Audio)",
+    href: "/dashboard/audio-tutor",
+    icon: Headphones,
   },
   {
     title: "কুইজ টেস্ট",
