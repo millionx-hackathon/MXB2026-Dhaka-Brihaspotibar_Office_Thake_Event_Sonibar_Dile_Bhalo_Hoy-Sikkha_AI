@@ -47,6 +47,7 @@ export default function ChapterReaderPage() {
   const [contextItems, setContextItems] = useState<Array<{ text: string; page: number }>>([]);
   const [pdfScale, setPdfScale] = useState(1.2);
   const [totalPages, setTotalPages] = useState(100); // Default, will be updated from PDF
+  const [currentPageText, setCurrentPageText] = useState<string>(''); // Extracted text from current PDF page
   const readingStartTime = useRef<number>(Date.now());
   const lastPageChangeTime = useRef<number>(Date.now());
 
@@ -380,6 +381,11 @@ export default function ChapterReaderPage() {
               isHighlighted={isCurrentPageHighlighted}
               onTotalPagesChange={setTotalPages}
               textHighlights={textHighlights}
+              onPageTextExtracted={(pageNum, text) => {
+                if (pageNum === currentPage) {
+                  setCurrentPageText(text);
+                }
+              }}
             />
           }
           rightPanel={
@@ -392,6 +398,7 @@ export default function ChapterReaderPage() {
               chapterId={chapterId}
               bookId={bookId}
               pdfScale={pdfScale}
+              pageText={currentPageText}
               onClearContext={() => setContextItems([])}
               onAddContext={(text, page) => {
                 setContextItems(prev => [...prev, { text, page }]);

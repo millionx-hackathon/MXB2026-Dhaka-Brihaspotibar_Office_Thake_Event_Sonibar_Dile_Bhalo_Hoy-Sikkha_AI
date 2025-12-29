@@ -25,6 +25,7 @@ interface ChatSidebarProps {
   chapterId?: string;
   bookId?: string;
   pdfScale?: number;
+  pageText?: string; // Extracted text from current PDF page
   onClearContext: () => void;
   onAddContext?: (text: string, page: number) => void;
 }
@@ -38,6 +39,7 @@ export default function ChatSidebar({
   chapterId = 'ch1',
   bookId,
   pdfScale = 1.2,
+  pageText,
   onClearContext,
   onAddContext,
 }: ChatSidebarProps) {
@@ -95,6 +97,7 @@ export default function ChatSidebar({
           chapterTitle,
           chapterId,
           bookId,
+          pageText, // Include extracted PDF page text
           chatHistory: [],
         }),
       });
@@ -248,6 +251,7 @@ export default function ChatSidebar({
           chapterTitle,
           chapterId,
           bookId,
+          pageText, // Include extracted PDF page text
           chatHistory,
         }),
       });
