@@ -29,8 +29,11 @@ export default function AudioTutorPage() {
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [script, setScript] = useState<string | null>(null);
+  const [scriptMetadata, setScriptMetadata] = useState<any[]>([]);
+  const [currentWordIndex, setCurrentWordIndex] = useState<number>(-1);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const wordRefs = useRef<(HTMLSpanElement | null)[]>([]);
 
   const handleGenerate = async () => {
     if (!text.trim() || isGenerating) return;
@@ -38,6 +41,8 @@ export default function AudioTutorPage() {
     setIsGenerating(true);
     setError(null);
     setScript(null);
+    setScriptMetadata([]);
+    setCurrentWordIndex(-1);
 
     try {
       const response = await fetch('/api/audio-tutor', {
@@ -55,13 +60,17 @@ export default function AudioTutorPage() {
         throw new Error('অডিও তৈরি করতে সমস্যা হয়েছে।');
       }
 
-      // Extract generated script from header if available
-      const generatedScript = response.headers.get('X-Generated-Script');
-      if (generatedScript) {
-        setScript(decodeURIComponent(generatedScript));
-      }
+      const data = await response.json();
+      setScript(data.script);
+      setScriptMetadata(data.metadata || []);
 
-      const blob = await response.blob();
+      // Convert base64 to blob
+      const binaryString = atob(data.audio);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: 'audio/mpeg' });
       const url = URL.createObjectURL(blob);
       setAudioUrl(url);
 
@@ -89,7 +98,25 @@ export default function AudioTutorPage() {
 
   const handleTimeUpdate = () => {
     if (audioRef.current) {
+      const timeInTicks = audioRef.current.currentTime * 10000000;
       setCurrentTime(audioRef.current.currentTime);
+
+      // Find current word from metadata
+      if (scriptMetadata.length > 0) {
+        const currentWord = scriptMetadata.findIndex(meta =>
+          meta.Type === 'WordBoundary' &&
+          timeInTicks >= meta.Data.Offset &&
+          timeInTicks <= (meta.Data.Offset + meta.Data.Duration + 2000000) // Add slight buffer
+        );
+        if (currentWord !== -1 && currentWord !== currentWordIndex) {
+          setCurrentWordIndex(currentWord);
+          // Auto scroll to current word
+          wordRefs.current[currentWord]?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+          });
+        }
+      }
     }
   };
 
@@ -127,6 +154,37 @@ export default function AudioTutorPage() {
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  // Helper to render highlighted script
+  const renderScript = () => {
+    if (!script) return null;
+
+    // If no metadata, just show text
+    if (scriptMetadata.length === 0) return script;
+
+    const words = scriptMetadata.filter(m => m.Type === 'WordBoundary');
+    wordRefs.current = wordRefs.current.slice(0, words.length);
+
+    return (
+      <div className="flex flex-wrap gap-x-1.5 gap-y-1">
+        {words.map((meta, idx) => (
+          <span
+            key={idx}
+            ref={el => { wordRefs.current[idx] = el; }}
+            className={`transition-all duration-300 rounded px-1 py-0.5 text-sm ${
+              idx === currentWordIndex
+                ? 'bg-indigo-600 text-white shadow-md scale-110 font-bold z-10'
+                : idx < currentWordIndex
+                ? 'text-slate-900 font-medium'
+                : 'text-slate-400 opacity-60'
+            }`}
+          >
+            {meta.Data.text.Text}
+          </span>
+        ))}
+      </div>
+    );
   };
 
   return (
@@ -296,7 +354,7 @@ export default function AudioTutorPage() {
                   শিক্ষা ভাই-এর স্ক্রিপ্ট
                 </h4>
                 <div className="text-slate-600 text-sm leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto pr-2 custom-scrollbar">
-                  {script}
+                  {renderScript()}
                 </div>
               </div>
             )}

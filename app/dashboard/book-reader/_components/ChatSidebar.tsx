@@ -374,11 +374,16 @@ export default function ChatSidebar({
         throw new Error('Failed to generate audio');
       }
 
-      const blob = await response.blob();
-      const scriptFromHeader = response.headers.get('X-Generated-Script');
-      if (scriptFromHeader) {
-        setAudioScript(decodeURIComponent(scriptFromHeader));
+      const data = await response.json();
+      setAudioScript(data.script);
+
+      // Convert base64 to blob
+      const binaryString = atob(data.audio);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
       }
+      const blob = new Blob([bytes], { type: 'audio/mpeg' });
 
       const url = URL.createObjectURL(blob);
       setAudioUrl(url);

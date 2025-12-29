@@ -59,7 +59,7 @@ const escapeXml = (unsafe: string) => unsafe.replace(/[<>&"']/g, (c) => {
     }
 });
 
-async function synthesizeSpeech(text: string): Promise<Buffer> {
+async function synthesizeSpeech(text: string): Promise<{ audio: Buffer; metadata: any[] }> {
     return new Promise((resolve, reject) => {
         const ws = new WebSocket(EDGE_TTS_URL, {
             headers: {
@@ -70,10 +70,11 @@ async function synthesizeSpeech(text: string): Promise<Buffer> {
         });
 
         let audioData = Buffer.alloc(0);
+        let metadata: any[] = [];
         const requestId = uuidv4().replace(/-/g, '');
 
         ws.on('open', () => {
-            const configMsg = `Content-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}`;
+            const configMsg = `Content-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"true"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}`;
             ws.send(configMsg);
 
             const escapedText = escapeXml(text);
@@ -86,15 +87,38 @@ async function synthesizeSpeech(text: string): Promise<Buffer> {
                 const buffer = data as Buffer;
                 if (buffer.length > 2) {
                     const headerLength = buffer.readInt16BE(0);
-                    // The audio payload is exactly after the header (preatream preamble + header)
-                    // Preamble is 12 bytes
-                    audioData = Buffer.concat([audioData, buffer.slice(headerLength + 12)]);
+                    const header = buffer.slice(2, 2 + headerLength).toString();
+                    const payload = buffer.slice(headerLength + 12);
+
+                    if (header.includes('Path:audio\r\n')) {
+                        audioData = Buffer.concat([audioData, payload]);
+                    } else if (header.includes('Path:audio.metadata\r\n')) {
+                        try {
+                            const meta = JSON.parse(payload.toString());
+                            if (meta.Metadata) {
+                                metadata.push(...meta.Metadata);
+                            }
+                        } catch (e) {
+                            console.error('Metadata binary parse error:', e);
+                        }
+                    }
                 }
             } else {
                 const message = data.toString();
+                if (message.includes('Path:audio.metadata')) {
+                    try {
+                        const body = message.split('\r\n\r\n')[1];
+                        if (body) {
+                            const meta = JSON.parse(body);
+                            if (meta.Metadata) metadata.push(...meta.Metadata);
+                        }
+                    } catch (e) {
+                        console.error('Metadata text parse error:', e);
+                    }
+                }
                 if (message.includes('Path:turn.end')) {
                     ws.close();
-                    resolve(audioData);
+                    resolve({ audio: audioData, metadata });
                 }
             }
         });
@@ -107,7 +131,7 @@ async function synthesizeSpeech(text: string): Promise<Buffer> {
 
         ws.on('close', (code, reason) => {
             if (audioData.length > 0) {
-                resolve(audioData);
+                resolve({ audio: audioData, metadata });
             } else {
                 reject(new Error(`WS closed without data: ${code} ${reason}`));
             }
@@ -116,7 +140,7 @@ async function synthesizeSpeech(text: string): Promise<Buffer> {
         setTimeout(() => {
             if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
                 ws.close();
-                if (audioData.length > 0) resolve(audioData);
+                if (audioData.length > 0) resolve({ audio: audioData, metadata });
                 else reject(new Error('TTS Timeout'));
             }
         }, 45000); // 45s for long narrations
@@ -145,16 +169,15 @@ export async function POST(request: NextRequest) {
         }
 
         // Step 2: Convert to speech
-        console.log('Synthesizing speech...');
-        const audioBuffer = await synthesizeSpeech(script);
+        console.log('Synthesizing speech with metadata...');
+        const result = await synthesizeSpeech(script);
 
-        // Step 3: Return audio
-        return new Response(audioBuffer, {
-            headers: {
-                'Content-Type': 'audio/mpeg',
-                'X-Generated-Script': encodeURIComponent(script),
-                'Access-Control-Expose-Headers': 'X-Generated-Script',
-            },
+        // Step 3: Return audio, script, and metadata
+        return NextResponse.json({
+            audio: result.audio.toString('base64'),
+            script,
+            metadata: result.metadata,
+            success: true
         });
 
     } catch (error) {
