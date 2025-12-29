@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { X, Send, Loader2, Sparkles, FileQuestion, Trash2, Copy, Check } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import StreamingMessage from './StreamingMessage';
 import QuizGenerator from './QuizGenerator';
 import { getPageQuestions, getRandomSuggestion, PageQuestion } from '@/app/dashboard/book-reader/_data/pageQuestions';
@@ -473,14 +474,39 @@ export default function ChatSidebar({
               }`}
             >
               {message.isStreaming ? (
-                <p className="whitespace-pre-wrap bengali-text" lang="bn" style={{ fontSize: `${chatFontSize}px`, lineHeight: '1.6' }}>
+                <div className="bengali-text prose prose-sm max-w-none" lang="bn" style={{ fontSize: `${chatFontSize}px`, lineHeight: '1.6' }}>
                   <StreamingMessage
                     content={message.content}
                     isStreaming={true}
                   />
-                </p>
+                </div>
               ) : (
-                <p className="whitespace-pre-wrap bengali-text" lang="bn" style={{ fontSize: `${chatFontSize}px`, lineHeight: '1.6' }}>{message.content}</p>
+                <div
+                  className={`bengali-text prose prose-sm max-w-none ${
+                    message.role === 'user'
+                      ? 'prose-invert'
+                      : 'prose-gray'
+                  }`}
+                  lang="bn"
+                  style={{ fontSize: `${chatFontSize}px`, lineHeight: '1.6' }}
+                >
+                  <ReactMarkdown
+                    components={{
+                      strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+                      em: ({ children }) => <em className="italic">{children}</em>,
+                      ul: ({ children }) => <ul className="list-disc list-inside my-2 space-y-1">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal list-inside my-2 space-y-1">{children}</ol>,
+                      li: ({ children }) => <li className="ml-2">{children}</li>,
+                      p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                      h1: ({ children }) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
+                      h2: ({ children }) => <h2 className="text-base font-bold mb-2">{children}</h2>,
+                      h3: ({ children }) => <h3 className="text-sm font-bold mb-1">{children}</h3>,
+                      code: ({ children }) => <code className="bg-black/10 px-1 py-0.5 rounded text-sm">{children}</code>,
+                    }}
+                  >
+                    {message.content}
+                  </ReactMarkdown>
+                </div>
               )}
 
               {/* Quotes */}
