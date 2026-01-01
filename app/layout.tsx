@@ -4,6 +4,9 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { ReduxProvider } from "@/components/providers/ReduxProvider";
 import "./globals.css";
 
+// Force dynamic rendering to avoid static generation issues with Clerk
+export const dynamic = "force-dynamic";
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
