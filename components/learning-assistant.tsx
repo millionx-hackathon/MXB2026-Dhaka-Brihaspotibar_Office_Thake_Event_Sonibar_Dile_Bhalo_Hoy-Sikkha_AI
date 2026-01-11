@@ -38,7 +38,19 @@ export function LearningAssistant() {
     return null;
   }
 
-    const handleSend = async () => {
+  // Check if question is physics-related
+  const isPhysicsQuestion = (text: string): boolean => {
+    const physicsKeywords = [
+      'ক্ষমতা', 'কাজ', 'শক্তি', 'গতি', 'ত্বরণ', 'বল', 'সরল', 'তরঙ্গ',
+      'পরমাণু', 'আলো', 'তাপ', 'চৌম্বক', 'বিদ্যুৎ', 'ঘর্ষণ', 'ঘনত্ব',
+      'pressure', 'force', 'energy', 'velocity', 'acceleration', 'momentum',
+      'work', 'power', 'heat', 'light', 'wave', 'frequency', 'wavelength',
+      'collision', 'friction', 'tension', 'equilibrium',
+    ];
+    return physicsKeywords.some(keyword => text.toLowerCase().includes(keyword.toLowerCase()));
+  };
+
+  const handleSend = async () => {
     if (!input.trim() || isTyping) return;
 
     const userMessage = {
@@ -53,34 +65,65 @@ export function LearningAssistant() {
     setIsTyping(true);
 
     try {
-      const response = await fetch('/api/reader-ai', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: userMessage.content,
-          contextItems: [],
-          currentPage: 0,
-          chapterTitle: 'General Support',
-          chapterId: 'general',
-          bookId: 'general-assistant',
-          chatHistory: messages.map(m => ({ role: m.role, content: m.content })),
-        }),
-      });
+      let response;
+      let data;
 
-      const data = await response.json();
+      // Use physics-tutor API for physics questions
+      if (isPhysicsQuestion(userMessage.content)) {
+        response = await fetch('/api/physics-tutor', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            question: userMessage.content,
+          }),
+        });
 
-      if (data.success) {
+        data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to get physics answer');
+        }
+
         const assistantMessage = {
           id: Date.now().toString(),
           role: 'assistant' as const,
-          content: data.response,
+          content: data.answer,
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, assistantMessage]);
       } else {
-        throw new Error(data.error || 'Failed to get response');
+        // Use general reader-ai API for other questions
+        response = await fetch('/api/reader-ai', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: userMessage.content,
+            contextItems: [],
+            currentPage: 0,
+            chapterTitle: 'General Support',
+            chapterId: 'general',
+            bookId: 'general-assistant',
+            chatHistory: messages.map(m => ({ role: m.role, content: m.content })),
+          }),
+        });
+
+        data = await response.json();
+
+        if (data.success) {
+          const assistantMessage = {
+            id: Date.now().toString(),
+            role: 'assistant' as const,
+            content: data.response,
+            timestamp: new Date(),
+          };
+          setMessages((prev) => [...prev, assistantMessage]);
+        } else {
+          throw new Error(data.error || 'Failed to get response');
+        }
       }
     } catch (error) {
       console.error('Learning Assistant Error:', error);
