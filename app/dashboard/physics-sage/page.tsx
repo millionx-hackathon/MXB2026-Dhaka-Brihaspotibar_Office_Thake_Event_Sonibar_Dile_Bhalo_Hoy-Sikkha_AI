@@ -239,7 +239,10 @@ export default function PhysicsSagePage() {
                             <li className="text-gray-800" {...props} />
                           ),
                           strong: ({ node, ...props }) => (
-                            <strong className="font-bold text-gray-900" {...props} />
+                            <strong
+                              className="font-bold text-gray-900"
+                              {...props}
+                            />
                           ),
                           em: ({ node, ...props }) => (
                             <em className="italic" {...props} />

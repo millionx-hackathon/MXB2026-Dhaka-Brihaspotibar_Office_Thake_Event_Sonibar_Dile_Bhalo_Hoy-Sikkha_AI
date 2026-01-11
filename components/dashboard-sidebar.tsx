@@ -305,7 +305,7 @@ export function DashboardSidebar() {
               className={cn(
                 "flex items-center px-3 py-2 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-100 transition-colors",
                 pathname === "/dashboard/settings" &&
-                "bg-blue-50 text-blue-600",
+                  "bg-blue-50 text-blue-600",
                 isCollapsed && "justify-center"
               )}
               title={isCollapsed ? "Settings" : undefined}
