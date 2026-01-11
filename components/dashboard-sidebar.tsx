@@ -24,6 +24,7 @@ import {
   PanelLeft,
   Headphones,
   Mic,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +40,11 @@ const navigationItems: NavItem[] = [
     title: "ড্যাশবোর্ড",
     href: "/dashboard",
     icon: Home,
+  },
+  {
+    title: "পদার্থবিজ্ঞান শিক্ষক",
+    href: "/dashboard/physics-sage",
+    icon: Sparkles,
   },
   {
     title: "AI শিক্ষক",
