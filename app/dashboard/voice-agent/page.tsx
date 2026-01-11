@@ -1,28 +1,53 @@
-'use client';
-import { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Phone, PhoneOff, Settings, Loader2, Volume2, Upload, FileText } from 'lucide-react';
-import Link from 'next/link';
+"use client";
+import { useState, useEffect, useRef } from "react";
+import {
+  Mic,
+  MicOff,
+  Phone,
+  PhoneOff,
+  Settings,
+  Loader2,
+  Volume2,
+  Upload,
+  FileText,
+} from "lucide-react";
+import Link from "next/link";
 
 // Import Ultravox client (dynamic import for SSR compatibility)
 let UltravoxSession: any = null;
+let isUltravoxAvailable = false;
 
 export default function VoiceAgentPage() {
-  const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'speaking' | 'listening'>('idle');
-  const [transcript, setTranscript] = useState<Array<{ role: string, text: string }>>([]);
+  const [status, setStatus] = useState<
+    "idle" | "connecting" | "connected" | "speaking" | "listening"
+  >("idle");
+  const [transcript, setTranscript] = useState<
+    Array<{ role: string; text: string }>
+  >([]);
   const [isMuted, setIsMuted] = useState(false);
-  const [baseUrl, setBaseUrl] = useState('http://localhost:8080');
+  const [baseUrl, setBaseUrl] = useState("http://localhost:8080");
   const [showSettings, setShowSettings] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sessionRef = useRef<any>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Dynamic import of ultravox-client
-    import('ultravox-client').then((module) => {
-      UltravoxSession = module.UltravoxSession;
-    }).catch(() => {
-      console.warn('Ultravox client not available');
-    });
+    // Dynamic import of ultravox-client with better error handling
+    if (typeof window !== "undefined") {
+      // Use dynamic import with webpack magic comment to make it optional
+      import(/* webpackMode: "lazy" */ "ultravox-client")
+        .then((module) => {
+          UltravoxSession = module.UltravoxSession;
+          isUltravoxAvailable = true;
+        })
+        .catch((err) => {
+          console.warn("Ultravox client not available:", err);
+          isUltravoxAvailable = false;
+          setError(
+            "Voice agent feature is currently unavailable. Please check your setup."
+          );
+        });
+    }
   }, []);
 
   useEffect(() => {
@@ -34,17 +59,19 @@ export default function VoiceAgentPage() {
 
   const startCall = async () => {
     if (!UltravoxSession) {
-      setError('Ultravox client not loaded. Please refresh the page.');
+      setError("Ultravox client not loaded. Please refresh the page.");
       return;
     }
 
     // Check if mediaDevices is available (requires HTTPS or localhost)
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setError('Microphone access requires HTTPS. Please access this page via HTTPS or localhost.');
+      setError(
+        "Microphone access requires HTTPS. Please access this page via HTTPS or localhost."
+      );
       return;
     }
 
-    setStatus('connecting');
+    setStatus("connecting");
     setError(null);
 
     try {
@@ -52,13 +79,15 @@ export default function VoiceAgentPage() {
       try {
         await navigator.mediaDevices.getUserMedia({ audio: true });
       } catch (mediaErr) {
-        throw new Error('Microphone access denied. Please allow microphone access and try again.');
+        throw new Error(
+          "Microphone access denied. Please allow microphone access and try again."
+        );
       }
 
       // Get join URL from backend
       const res = await fetch(`${baseUrl}/api/voice/call`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ baseUrl: window.location.origin }),
       });
 
@@ -73,43 +102,51 @@ export default function VoiceAgentPage() {
       sessionRef.current = session;
 
       // Listen for status changes
-      session.addEventListener('status', (event: any) => {
+      session.addEventListener("status", (event: any) => {
         const newStatus = event?.status;
-        if (newStatus === 'listening') setStatus('listening');
-        else if (newStatus === 'speaking') setStatus('speaking');
-        else if (newStatus === 'idle') setStatus('connected');
+        if (newStatus === "listening") setStatus("listening");
+        else if (newStatus === "speaking") setStatus("speaking");
+        else if (newStatus === "idle") setStatus("connected");
       });
 
       // Listen for transcripts - handle different event structures
-      session.addEventListener('transcripts', (event: any) => {
-        const transcripts = event?.transcripts || event?.detail?.transcripts || [];
+      session.addEventListener("transcripts", (event: any) => {
+        const transcripts =
+          event?.transcripts || event?.detail?.transcripts || [];
         if (Array.isArray(transcripts)) {
-          setTranscript(transcripts.map((t: any) => ({
-            role: t.speaker || t.role || 'agent',
-            text: t.text || t.content || ''
-          })));
+          setTranscript(
+            transcripts.map((t: any) => ({
+              role: t.speaker || t.role || "agent",
+              text: t.text || t.content || "",
+            }))
+          );
         }
       });
 
       // Also listen for individual transcript updates
-      session.addEventListener('transcript', (event: any) => {
+      session.addEventListener("transcript", (event: any) => {
         const t = event?.transcript || event?.detail || event;
         if (t && t.text) {
-          setTranscript(prev => [...prev, {
-            role: t.speaker || t.role || 'agent',
-            text: t.text || t.content || ''
-          }]);
+          setTranscript((prev) => [
+            ...prev,
+            {
+              role: t.speaker || t.role || "agent",
+              text: t.text || t.content || "",
+            },
+          ]);
         }
       });
 
       // Join the call
       await session.joinCall(joinUrl);
-      setStatus('connected');
-
+      setStatus("connected");
     } catch (err: any) {
-      console.error('Failed to start call:', err);
-      setError(err.message || 'Failed to connect. Please check the base URL and try again.');
-      setStatus('idle');
+      console.error("Failed to start call:", err);
+      setError(
+        err.message ||
+          "Failed to connect. Please check the base URL and try again."
+      );
+      setStatus("idle");
     }
   };
 
@@ -118,7 +155,7 @@ export default function VoiceAgentPage() {
       sessionRef.current.leaveCall();
       sessionRef.current = null;
     }
-    setStatus('idle');
+    setStatus("idle");
     setTranscript([]);
   };
 
@@ -135,18 +172,42 @@ export default function VoiceAgentPage() {
 
   const getStatusConfig = () => {
     switch (status) {
-      case 'idle':
-        return { bg: 'bg-gray-100', text: 'Start a voice call with AI', icon: null };
-      case 'connecting':
-        return { bg: 'bg-amber-100', text: 'Connecting...', icon: <Loader2 className="w-5 h-5 animate-spin text-amber-600" /> };
-      case 'connected':
-        return { bg: 'bg-green-100', text: 'Connected - Start speaking!', icon: <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" /> };
-      case 'listening':
-        return { bg: 'bg-emerald-100', text: '🎤 Listening...', icon: <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse" /> };
-      case 'speaking':
-        return { bg: 'bg-indigo-100', text: '🔊 AI is speaking...', icon: <Volume2 className="w-5 h-5 text-indigo-600 animate-pulse" /> };
+      case "idle":
+        return {
+          bg: "bg-gray-100",
+          text: "Start a voice call with AI",
+          icon: null,
+        };
+      case "connecting":
+        return {
+          bg: "bg-amber-100",
+          text: "Connecting...",
+          icon: <Loader2 className="w-5 h-5 animate-spin text-amber-600" />,
+        };
+      case "connected":
+        return {
+          bg: "bg-green-100",
+          text: "Connected - Start speaking!",
+          icon: (
+            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
+          ),
+        };
+      case "listening":
+        return {
+          bg: "bg-emerald-100",
+          text: "🎤 Listening...",
+          icon: (
+            <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse" />
+          ),
+        };
+      case "speaking":
+        return {
+          bg: "bg-indigo-100",
+          text: "🔊 AI is speaking...",
+          icon: <Volume2 className="w-5 h-5 text-indigo-600 animate-pulse" />,
+        };
       default:
-        return { bg: 'bg-gray-100', text: '', icon: null };
+        return { bg: "bg-gray-100", text: "", icon: null };
     }
   };
 
@@ -155,13 +216,14 @@ export default function VoiceAgentPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-indigo-50/30 to-purple-50/30 p-4 md:p-8">
       <div className="max-w-3xl mx-auto space-y-6">
-
         {/* Header */}
         <div className="text-center space-y-3 mb-8">
           <div className="inline-flex p-4 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-xl shadow-indigo-200 mb-4">
             <Phone className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl md:text-4xl font-bold text-gray-900">Voice Agent</h1>
+          <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
+            Voice Agent
+          </h1>
           <p className="text-gray-600 max-w-lg mx-auto">
             Real-time voice conversation with AI using Ultravox WebRTC
           </p>
@@ -198,23 +260,28 @@ export default function VoiceAgentPage() {
               <Settings className="w-5 h-5 text-gray-500" />
               <span className="font-medium text-gray-700">Configuration</span>
             </div>
-            <span className="text-sm text-gray-500">{showSettings ? '▲' : '▼'}</span>
+            <span className="text-sm text-gray-500">
+              {showSettings ? "▲" : "▼"}
+            </span>
           </button>
 
           {showSettings && (
             <div className="p-4 pt-0 border-t border-gray-100">
               <label className="block">
-                <span className="text-sm font-medium text-gray-700 mb-2 block">Backend Base URL</span>
+                <span className="text-sm font-medium text-gray-700 mb-2 block">
+                  Backend Base URL
+                </span>
                 <input
                   type="text"
                   value={baseUrl}
                   onChange={(e) => setBaseUrl(e.target.value)}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all outline-none font-mono text-sm"
                   placeholder="http://localhost:8080"
-                  disabled={status !== 'idle'}
+                  disabled={status !== "idle"}
                 />
                 <p className="text-xs text-gray-500 mt-2">
-                  The base URL of the backend API server (e.g., http://localhost:8080)
+                  The base URL of the backend API server (e.g.,
+                  http://localhost:8080)
                 </p>
               </label>
             </div>
@@ -229,10 +296,14 @@ export default function VoiceAgentPage() {
         )}
 
         {/* Status Indicator */}
-        <div className={`text-center p-5 rounded-2xl transition-all duration-300 ${statusConfig.bg}`}>
+        <div
+          className={`text-center p-5 rounded-2xl transition-all duration-300 ${statusConfig.bg}`}
+        >
           <div className="flex items-center justify-center gap-3">
             {statusConfig.icon}
-            <span className="font-medium text-gray-800">{statusConfig.text}</span>
+            <span className="font-medium text-gray-800">
+              {statusConfig.text}
+            </span>
           </div>
         </div>
 
@@ -245,22 +316,34 @@ export default function VoiceAgentPage() {
           <div className="relative z-10">
             {/* Voice Visualizer */}
             <div className="flex justify-center mb-8">
-              <div className={`w-32 h-32 rounded-full flex items-center justify-center transition-all duration-500 ${status === 'idle' ? 'bg-gray-100' :
-                status === 'connecting' ? 'bg-amber-100 animate-pulse' :
-                  status === 'listening' ? 'bg-gradient-to-br from-emerald-400 to-teal-500 shadow-lg shadow-emerald-200 scale-110' :
-                    status === 'speaking' ? 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-200 scale-110' :
-                      'bg-gradient-to-br from-green-400 to-emerald-500 shadow-lg shadow-green-200'
-                }`}>
-                <Mic className={`w-12 h-12 transition-all duration-300 ${status === 'idle' ? 'text-gray-400' :
-                  status === 'connecting' ? 'text-amber-600' :
-                    'text-white'
-                  } ${status === 'speaking' ? 'animate-bounce' : ''}`} />
+              <div
+                className={`w-32 h-32 rounded-full flex items-center justify-center transition-all duration-500 ${
+                  status === "idle"
+                    ? "bg-gray-100"
+                    : status === "connecting"
+                    ? "bg-amber-100 animate-pulse"
+                    : status === "listening"
+                    ? "bg-gradient-to-br from-emerald-400 to-teal-500 shadow-lg shadow-emerald-200 scale-110"
+                    : status === "speaking"
+                    ? "bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-200 scale-110"
+                    : "bg-gradient-to-br from-green-400 to-emerald-500 shadow-lg shadow-green-200"
+                }`}
+              >
+                <Mic
+                  className={`w-12 h-12 transition-all duration-300 ${
+                    status === "idle"
+                      ? "text-gray-400"
+                      : status === "connecting"
+                      ? "text-amber-600"
+                      : "text-white"
+                  } ${status === "speaking" ? "animate-bounce" : ""}`}
+                />
               </div>
             </div>
 
             {/* Call Controls */}
             <div className="flex justify-center gap-4 mb-8">
-              {status === 'idle' ? (
+              {status === "idle" ? (
                 <button
                   onClick={startCall}
                   className="bg-gradient-to-r from-green-500 to-emerald-600 text-white px-8 py-4 rounded-2xl flex items-center gap-3 font-bold text-lg shadow-lg shadow-green-200 hover:shadow-xl hover:scale-105 transition-all duration-300"
@@ -272,13 +355,18 @@ export default function VoiceAgentPage() {
                 <>
                   <button
                     onClick={toggleMute}
-                    className={`p-4 rounded-2xl transition-all duration-300 ${isMuted
-                      ? 'bg-red-500 text-white shadow-lg shadow-red-200'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    title={isMuted ? 'Unmute' : 'Mute'}
+                    className={`p-4 rounded-2xl transition-all duration-300 ${
+                      isMuted
+                        ? "bg-red-500 text-white shadow-lg shadow-red-200"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                    title={isMuted ? "Unmute" : "Mute"}
                   >
-                    {isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+                    {isMuted ? (
+                      <MicOff className="w-6 h-6" />
+                    ) : (
+                      <Mic className="w-6 h-6" />
+                    )}
                   </button>
                   <button
                     onClick={endCall}
@@ -305,14 +393,19 @@ export default function VoiceAgentPage() {
                   {transcript.map((t, i) => (
                     <div
                       key={i}
-                      className={`flex ${t.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                      className={`flex ${
+                        t.role === "user" ? "justify-end" : "justify-start"
+                      }`}
                     >
-                      <div className={`max-w-[80%] p-4 rounded-2xl ${t.role === 'user'
-                        ? 'bg-indigo-600 text-white rounded-br-md'
-                        : 'bg-white border border-gray-200 text-gray-800 rounded-bl-md shadow-sm'
-                        }`}>
+                      <div
+                        className={`max-w-[80%] p-4 rounded-2xl ${
+                          t.role === "user"
+                            ? "bg-indigo-600 text-white rounded-br-md"
+                            : "bg-white border border-gray-200 text-gray-800 rounded-bl-md shadow-sm"
+                        }`}
+                      >
                         <p className="text-xs font-bold mb-1 opacity-70 uppercase tracking-wider">
-                          {t.role === 'user' ? 'You' : 'AI'}
+                          {t.role === "user" ? "You" : "AI"}
                         </p>
                         <p className="text-sm leading-relaxed">{t.text}</p>
                       </div>
@@ -326,8 +419,16 @@ export default function VoiceAgentPage() {
 
         {/* Help Text */}
         <div className="text-center text-sm text-gray-500">
-          <p>Make sure your backend server is running at the configured base URL.</p>
-          <p className="mt-1">The backend should have the <code className="bg-gray-100 px-2 py-1 rounded">/api/voice/call</code> endpoint available.</p>
+          <p>
+            Make sure your backend server is running at the configured base URL.
+          </p>
+          <p className="mt-1">
+            The backend should have the{" "}
+            <code className="bg-gray-100 px-2 py-1 rounded">
+              /api/voice/call
+            </code>{" "}
+            endpoint available.
+          </p>
         </div>
       </div>
     </div>
