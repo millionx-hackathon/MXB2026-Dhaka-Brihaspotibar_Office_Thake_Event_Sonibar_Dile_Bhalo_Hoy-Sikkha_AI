@@ -249,19 +249,54 @@ export function LearningAssistant() {
                     }`}
                   >
                     <div className="text-sm leading-relaxed prose prose-sm max-w-none">
-                      {message.role === 'assistant' ? (
+                      {message.role === "assistant" ? (
                         <ReactMarkdown
                           components={{
-                            h1: ({ node, ...props }) => <h1 className="text-lg font-bold mt-2 mb-1" {...props} />,
-                            h2: ({ node, ...props }) => <h2 className="text-base font-bold mt-2 mb-1" {...props} />,
-                            h3: ({ node, ...props }) => <h3 className="text-sm font-semibold mt-1 mb-1" {...props} />,
-                            p: ({ node, ...props }) => <p className="mb-2" {...props} />,
-                            ul: ({ node, ...props }) => <ul className="list-disc pl-4 mb-2" {...props} />,
-                            ol: ({ node, ...props }) => <ol className="list-decimal pl-4 mb-2" {...props} />,
-                            li: ({ node, ...props }) => <li className="mb-1" {...props} />,
-                            strong: ({ node, ...props }) => <strong className="font-bold" {...props} />,
-                            em: ({ node, ...props }) => <em className="italic" {...props} />,
-                            code: ({ node, ...props }) => <code className="bg-gray-100 px-1 rounded text-xs" {...props} />,
+                            h1: ({ node, ...props }) => (
+                              <h1
+                                className="text-lg font-bold mt-2 mb-1"
+                                {...props}
+                              />
+                            ),
+                            h2: ({ node, ...props }) => (
+                              <h2
+                                className="text-base font-bold mt-2 mb-1"
+                                {...props}
+                              />
+                            ),
+                            h3: ({ node, ...props }) => (
+                              <h3
+                                className="text-sm font-semibold mt-1 mb-1"
+                                {...props}
+                              />
+                            ),
+                            p: ({ node, ...props }) => (
+                              <p className="mb-2" {...props} />
+                            ),
+                            ul: ({ node, ...props }) => (
+                              <ul className="list-disc pl-4 mb-2" {...props} />
+                            ),
+                            ol: ({ node, ...props }) => (
+                              <ol
+                                className="list-decimal pl-4 mb-2"
+                                {...props}
+                              />
+                            ),
+                            li: ({ node, ...props }) => (
+                              <li className="mb-1" {...props} />
+                            ),
+                            strong: ({ node, ...props }) => (
+                              <strong className="font-bold" {...props} />
+                            ),
+                            em: ({ node, ...props }) => (
+                              <em className="italic" {...props} />
+                            ),
+                            code: ({ node, ...props }) => (
+                              <code
+                                className="bg-gray-100 px-1 rounded text-xs"
+                                {...props}
+                              />
+                            ),
                           }}
                         >
                           {message.content}
