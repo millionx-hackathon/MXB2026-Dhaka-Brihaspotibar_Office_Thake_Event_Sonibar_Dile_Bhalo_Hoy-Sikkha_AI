@@ -1,32 +1,32 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(request: NextRequest) {
   try {
     const { question } = await request.json();
 
-    if (!question || typeof question !== 'string') {
+    if (!question || typeof question !== "string") {
       return NextResponse.json(
-        { error: 'Question is required and must be a string' },
+        { error: "Question is required and must be a string" },
         { status: 400 }
       );
     }
 
-    const ollamaResponse = await fetch('http://localhost:11434/api/chat', {
-      method: 'POST',
+    const ollamaResponse = await fetch("http://localhost:11434/api/chat", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: 'qwen-bangla-physics',
+        model: "qwen-bangla-physics",
         stream: false,
         messages: [
           {
-            role: 'system',
+            role: "system",
             content:
-              'You are an expert NCTB Physics tutor. Answer questions accurately and concisely in Bengali only. Use formulas and step-by-step explanations where necessary.',
+              "You are an expert NCTB Physics tutor. Answer questions accurately and concisely in Bengali only. Use formulas and step-by-step explanations where necessary.",
           },
           {
-            role: 'user',
+            role: "user",
             content: question,
           },
         ],
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
 
     if (!ollamaResponse.ok) {
       return NextResponse.json(
-        { error: 'Ollama API error: ' + ollamaResponse.statusText },
+        { error: "Ollama API error: " + ollamaResponse.statusText },
         { status: ollamaResponse.status }
       );
     }
@@ -48,9 +48,9 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error('Physics Tutor API Error:', error);
+    console.error("Physics Tutor API Error:", error);
     return NextResponse.json(
-      { error: 'Failed to process physics question' },
+      { error: "Failed to process physics question" },
       { status: 500 }
     );
   }

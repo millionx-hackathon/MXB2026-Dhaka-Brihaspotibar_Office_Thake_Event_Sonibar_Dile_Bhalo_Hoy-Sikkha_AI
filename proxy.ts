@@ -1,7 +1,12 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-const isPublicRoute = createRouteMatcher(["/", "/sign-in(.*)", "/sign-up(.*)", "/api/physics-tutor(.*)"]);
+const isPublicRoute = createRouteMatcher([
+  "/",
+  "/sign-in(.*)",
+  "/sign-up(.*)",
+  "/api/physics-tutor(.*)",
+]);
 const isDashboardRoute = createRouteMatcher(["/dashboard(.*)"]);
 
 export default clerkMiddleware(async (auth, request) => {
@@ -15,7 +20,11 @@ export default clerkMiddleware(async (auth, request) => {
   }
 
   // If user is signed in and on home page, redirect to dashboard
-  if (userId && request.nextUrl.pathname === "/" && !request.nextUrl.pathname.startsWith("/dashboard")) {
+  if (
+    userId &&
+    request.nextUrl.pathname === "/" &&
+    !request.nextUrl.pathname.startsWith("/dashboard")
+  ) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
