@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(request: NextRequest) {
   try {
-    const { question } = await request.json();
+    const { question, stream } = await request.json();
 
     if (!question || typeof question !== "string") {
       return NextResponse.json(
@@ -11,6 +11,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Enable streaming for faster responses
+    const useStreaming = stream !== false; // Default to streaming
+
     const ollamaResponse = await fetch("http://localhost:11434/api/chat", {
       method: "POST",
       headers: {
@@ -18,7 +21,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: "qwen-bangla-physics",
-        stream: false,
+        stream: useStreaming,
         messages: [
           {
             role: "system",
@@ -30,6 +33,10 @@ export async function POST(request: NextRequest) {
             content: question,
           },
         ],
+        options: {
+          temperature: 0.7,
+          num_predict: 512, // Limit response length for faster generation
+        },
       }),
     });
 
@@ -40,6 +47,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // If streaming is enabled, return the stream
+    if (useStreaming) {
+      const readable = new ReadableStream({
+        async start(controller) {
+          const reader = ollamaResponse.body?.getReader();
+          const decoder = new TextDecoder();
+
+          if (!reader) {
+            controller.close();
+            return;
+          }
+
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              // Decode and forward the chunk
+              const chunk = decoder.decode(value, { stream: true });
+              const encoded = new TextEncoder().encode(chunk);
+              controller.enqueue(encoded);
+            }
+          } catch (error) {
+            console.error("Streaming error:", error);
+            controller.error(error);
+          } finally {
+            controller.close();
+          }
+        },
+      });
+
+      return new NextResponse(readable, {
+        headers: {
+          "Content-Type": "application/x-ndjson",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      });
+    }
+
+    // Non-streaming response (original behavior)
     const data = await ollamaResponse.json();
 
     return NextResponse.json({

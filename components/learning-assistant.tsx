@@ -28,8 +28,9 @@ export function LearningAssistant() {
   const inputRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
 
-  // Hide on book-reader pages - check AFTER all hooks are declared
+  // Hide on book-reader and physics-sage pages - check AFTER all hooks are declared
   const isBookReaderPage = pathname?.includes("/book-reader");
+  const isPhysicsSagePage = pathname?.includes("/physics-sage");
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
@@ -42,7 +43,7 @@ export function LearningAssistant() {
   }, [messages]);
 
   // Early return AFTER all hooks are declared
-  if (isBookReaderPage) {
+  if (isBookReaderPage || isPhysicsSagePage) {
     return null;
   }
 
@@ -102,37 +103,70 @@ export function LearningAssistant() {
     setIsTyping(true);
 
     try {
-      let response;
-      let data;
-
       // Use physics-tutor API for physics questions
       if (isPhysicsQuestion(userMessage.content)) {
-        response = await fetch("/api/physics-tutor", {
+        // Create placeholder message for streaming
+        const assistantMessageId = (Date.now() + 1).toString();
+        const assistantMessage = {
+          id: assistantMessageId,
+          role: "assistant" as const,
+          content: "",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+
+        const response = await fetch("/api/physics-tutor", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
             question: userMessage.content,
+            stream: true,
           }),
         });
 
-        data = await response.json();
-
         if (!response.ok) {
-          throw new Error(data.error || "Failed to get physics answer");
+          throw new Error("Failed to get physics answer");
         }
 
-        const assistantMessage = {
-          id: Date.now().toString(),
-          role: "assistant" as const,
-          content: data.answer,
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let fullContent = "";
+
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value);
+            const lines = chunk.split("\n").filter((line) => line.trim());
+
+            for (const line of lines) {
+              try {
+                const json = JSON.parse(line);
+                if (json.message?.content) {
+                  fullContent += json.message.content;
+                  // Update message in real-time
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === assistantMessageId
+                        ? { ...msg, content: fullContent }
+                        : msg
+                    )
+                  );
+                }
+              } catch (e) {
+                // Skip invalid JSON lines
+              }
+            }
+          }
+        }
+
+        setIsTyping(false);
       } else {
         // Use general reader-ai API for other questions
-        response = await fetch("/api/reader-ai", {
+        const response = await fetch("/api/reader-ai", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -151,7 +185,7 @@ export function LearningAssistant() {
           }),
         });
 
-        data = await response.json();
+        const data = await response.json();
 
         if (data.success) {
           const assistantMessage = {
@@ -164,6 +198,7 @@ export function LearningAssistant() {
         } else {
           throw new Error(data.error || "Failed to get response");
         }
+        setIsTyping(false);
       }
     } catch (error) {
       console.error("Learning Assistant Error:", error);
@@ -175,7 +210,6 @@ export function LearningAssistant() {
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
-    } finally {
       setIsTyping(false);
     }
   };
